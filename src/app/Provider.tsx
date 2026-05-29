@@ -55,7 +55,7 @@ const Providers: FC<PropsWithChildren> = ({ children }) => {
             hoverFillColor={isDark ? '#2C2C2C' : '#B0B0B0'}
           />
         </div>
-        <Toast.Provider placement='top' />
+        <Toast.Provider placement='top' width="auto" />
         <BackTop />
       </ProgressProvider>
     </MotionConfig>

@@ -7,11 +7,11 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       new URL('https://api.baiwumm.com/**'),
-      new URL('https://cdn.baiwumm.com/**'),
-      new URL('https://athbiwlqrieaoetfapxd.supabase.co/**')
+      new URL('https://cdn.baiwumm.com/**')
     ],
-    unoptimized: true, // 禁用 Vercel 图片优化
+    unoptimized: true,
   },
+  serverExternalPackages: ['better-sqlite3'],
 };
 
 export default nextConfig;

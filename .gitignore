@@ -30,11 +30,26 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files (ignore .env but keep .env.example)
+.env
+.env.local
+.env.*.local
 
 # vercel
 .vercel
+
+# local db
+/data/
+
+# user uploads
+/public/uploads/
+
+# downloaded fonts (re-download on npm install)
+/public/fonts/
+
+# IDE
+.vscode/
+.idea/
 
 # typescript
 *.tsbuildinfo

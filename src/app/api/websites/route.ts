@@ -1,114 +1,72 @@
-/*
- * @Author: 白雾茫茫丶<baiwumm.com>
- * @Date: 2026-01-23 16:08:45
- * @LastEditors: 白雾茫茫丶<baiwumm.com>
- * @LastEditTime: 2026-02-26 09:31:06
- * @Description: 网站列表模块
- */
 import { NextRequest, NextResponse } from 'next/server'
 
 import { RESPONSE } from '@/enums'
-import { getSupabaseServerClient } from '@/lib/supabase/server'
+import { initDb, getWebsitesList, createWebsite } from '@/lib/db'
+import { getCurrentUser } from '@/lib/auth/server'
 import { responseMessage } from '@/lib/utils'
 
-/**
- * @description: 查询网站列表
- * @param {Request} request
- */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServerClient();
-    // 解析 URL 查询参数
-    const searchParams = request.nextUrl.searchParams;
-    const pageIndex = Number(searchParams.get('pageIndex') || '0');
-    const pageSize = Number(searchParams.get('pageSize') || '10');
-    const name = searchParams.get('name');
-    const category_id = searchParams.get('category_id');
+    initDb()
+    const searchParams = request.nextUrl.searchParams
+    const pageIndex = Number(searchParams.get('pageIndex') || '0')
+    const pageSize = Number(searchParams.get('pageSize') || '10')
+    const name = searchParams.get('name')
+    const category_id = searchParams.get('category_id')
 
-    // 判断参数
-    if (
-      Number.isNaN(pageIndex) ||
-      Number.isNaN(pageSize) ||
-      pageIndex < 0 ||
-      pageSize <= 0
-    ) {
+    if (Number.isNaN(pageIndex) || Number.isNaN(pageSize) || pageIndex < 0 || pageSize <= 0) {
       return NextResponse.json(responseMessage(null, '参数错误', RESPONSE.ERROR))
     }
 
-    // 计算分页
-    const start = pageIndex * pageSize;
-    const end = start + pageSize - 1;
-
-    // 查询 sql
-    let sqlQuery = supabase
-      .from('ds_websites')
-      .select('*,category:ds_categorys(*)', { count: 'exact' })
-      .range(start, end)
-      .order('pinned', {
-        ascending: false
-      })
-      .order('sort', {
-        ascending: false
-      })
-      .order('recommend', {
-        ascending: false
-      })
-      .order('created_at', {
-        ascending: false
-      })
-
-    // 判断查询参数
-    if (name) {
-      sqlQuery = sqlQuery.like('name', `%${name}%`)
-    }
-    if (category_id) {
-      sqlQuery = sqlQuery.eq('category_id', category_id)
-    }
-
-    // 请求列表
-    const { data, error, count } = await sqlQuery
-
-    // 执行失败
-    if (error) {
-      return NextResponse.json(responseMessage(null, error.message, RESPONSE.ERROR))
-    }
+    const { list, total } = getWebsitesList({ pageIndex, pageSize, name, category_id })
 
     return NextResponse.json(responseMessage({
-      list: data,
-      total: count,
+      list,
+      total,
       page: pageIndex + 1,
       pageSize,
-    }));
+    }))
   } catch (err) {
-    return NextResponse.json(responseMessage(null, (err as Error).message, -1));
+    return NextResponse.json(responseMessage(null, (err as Error).message, -1))
   }
 }
 
-/**
- * @description: 新增网站
- * @param {Request} request
- */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServerClient();
-    // 解析请求体
-    const body = await request.json(); // 如果是 JSON 数据
-
-    // 插入数据
-    const { data, error } = await supabase.from('ds_websites').insert(body).select().single();
-
-    // 如果插入失败
-    if (error) {
-      // 判断是否违反唯一性约束（PostgreSQL 错误代码 23505）
-      if (error.code === '23505') {
-        return NextResponse.json(responseMessage(null, '网站名称已存在！', -1));
-      }
-
-      // 其他错误
-      return NextResponse.json(responseMessage(null, error.message, RESPONSE.ERROR));
+    initDb()
+    const user = await getCurrentUser(request)
+    if (!user) {
+      return NextResponse.json(responseMessage(null, '请先登录', -1))
     }
-    return NextResponse.json(responseMessage(data));
+
+    const body = await request.json()
+
+    try {
+      const data = createWebsite({
+        name: body.name,
+        desc: body.desc,
+        url: body.url,
+        logo: body.logo,
+        logoAccent: body.logoAccent,
+        tags: body.tags,
+        pinned: body.pinned,
+        recommend: body.recommend,
+        vpn: body.vpn,
+        commonlyUsed: body.commonlyUsed,
+        sort: body.sort,
+        category_id: body.category_id,
+        userId: user.sub,
+        email: user.email,
+      })
+      return NextResponse.json(responseMessage(data))
+    } catch (err: unknown) {
+      const msg = (err as Error).message || ''
+      if (msg.includes('UNIQUE constraint') || msg.includes('SQLITE_CONSTRAINT')) {
+        return NextResponse.json(responseMessage(null, '网站名称已存在！', -1))
+      }
+      throw err
+    }
   } catch (err) {
-    return NextResponse.json(responseMessage(null, (err as Error).message, -1));
+    return NextResponse.json(responseMessage(null, (err as Error).message, -1))
   }
 }

@@ -1,34 +1,40 @@
 /*
  * @Author: 白雾茫茫丶<baiwumm.com>
  * @Date: 2026-01-22 15:44:57
- * @LastEditors: 白雾茫茫丶<baiwumm.com>
+ * @LastEditors: QingYun
  * @LastEditTime: 2026-03-11 13:39:15
  * @Description: 用户头像
  */
 import { useRouter } from '@bprogress/next/app';
-import { ArrowRightFromSquare, GearDot, Person } from '@gravity-ui/icons';
+import { ArrowRightFromSquare, Eye, EyeSlash, GearDot, Person } from '@gravity-ui/icons';
 import { AlertDialog, Avatar, Badge, Button, Description, Dropdown, Label, Separator, Spinner, Tooltip, useOverlayState } from '@heroui/react';
-import { type FC, type Key, useState } from 'react';
+import { type FC, type Key, useEffect, useState } from 'react';
 
-import { useSupabaseUser } from '@/hooks/use-supabase-user';
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { useUser } from '@/hooks/use-user';
+
+const STORAGE_KEY = 'show-private-categories'
 
 const UserAvatar: FC = () => {
-  const supabase = getSupabaseBrowserClient();
   const router = useRouter();
-  // 获取登录用户信息
-  const { user, loading } = useSupabaseUser();
-  // 注销 Loading
+  const { user, loading } = useUser();
   const [logoutLoading, setLogoutLoading] = useState(false);
-  // 退出确认弹窗
   const [open, setOpen] = useState(false);
   const alertState = useOverlayState();
-  // 用户名称
-  const name = user?.user_metadata.name || user?.user_metadata.user_name || user?.email?.slice(0, 1);
-  // 用户头像
-  const avatar = user?.user_metadata.avatar_url as string;
+  const [showPrivate, setShowPrivate] = useState(true);
 
-  // 点击菜单回调
+  useEffect(() => {
+    setShowPrivate(localStorage.getItem(STORAGE_KEY) !== '0')
+  }, [])
+  const name = user?.name || user?.email?.slice(0, 1);
+  const avatar = user?.avatar_url as string;
+
+  const togglePrivate = () => {
+    const next = !showPrivate
+    setShowPrivate(next)
+    localStorage.setItem(STORAGE_KEY, next ? '1' : '0')
+    window.dispatchEvent(new CustomEvent('privacy-toggle', { detail: next }))
+  }
+
   const onClickMenu = (key: Key) => {
     switch (key) {
       case 'admin':
@@ -43,16 +49,12 @@ const UserAvatar: FC = () => {
     }
   }
 
-  // 退出登录
   const handleLogout = async () => {
     setLogoutLoading(true);
     try {
-      // 登出
-      await supabase.auth.signOut().then(() => {
-        alertState.close();
-        // 返回首页
-        router.push('/login');
-      })
+      await fetch('/api/auth/logout', { method: 'POST' });
+      alertState.close();
+      router.push('/login');
     } finally {
       setLogoutLoading(false);
     }
@@ -95,6 +97,10 @@ const UserAvatar: FC = () => {
               <GearDot className="size-4 shrink-0 text-muted" />
               <Label>管理后台</Label>
             </Dropdown.Item>
+            <Dropdown.Item id="privacy" textValue="Privacy" onAction={togglePrivate}>
+              {showPrivate ? <Eye className="size-4 shrink-0" /> : <EyeSlash className="size-4 shrink-0" />}
+              <Label>{showPrivate ? '隐藏隐私书签' : '显示隐私书签'}</Label>
+            </Dropdown.Item>
             <Dropdown.Item id="logout" textValue="Logout" variant="danger">
               <ArrowRightFromSquare className="size-4 shrink-0 text-danger" />
               <Label>退出登录</Label>
@@ -102,7 +108,6 @@ const UserAvatar: FC = () => {
           </Dropdown.Menu>
         </Dropdown.Popover>
       </Dropdown>
-      {/* 确认弹窗 */}
       <AlertDialog.Backdrop isOpen={alertState.isOpen} onOpenChange={alertState.setOpen}>
         <AlertDialog.Container>
           <AlertDialog.Dialog className="sm:max-w-100">

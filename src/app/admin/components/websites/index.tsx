@@ -1,7 +1,7 @@
 /*
  * @Author: 白雾茫茫丶<baiwumm.com>
  * @Date: 2026-01-23 15:24:22
- * @LastEditors: 白雾茫茫丶<baiwumm.com>
+ * @LastEditors: QingYun
  * @LastEditTime: 2026-03-11 14:09:27
  * @Description: 网站列表
  */
@@ -10,11 +10,10 @@ import { CircleCheckFill } from '@gravity-ui/icons';
 import { Card, toast, useOverlayState } from "@heroui/react";
 import {
   getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   SortingState,
   useReactTable,
+  type RowSelectionState,
   type VisibilityState
 } from '@tanstack/react-table';
 import { useRequest, useSetState } from 'ahooks';
@@ -28,7 +27,6 @@ import SaveModal from './components/save-modal';
 
 import DataTablePagination from '@/components/DataTablePagination';
 import { RESPONSE } from '@/enums';
-import { type FileWithPreview } from '@/hooks/use-file-upload';
 import { get } from '@/lib/utils';
 import { getCategorysList } from '@/services/categorys';
 import { delWebsite, getWebsitesList } from '@/services/websites';
@@ -49,10 +47,15 @@ const Websites: FC = () => {
   // 受控列
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
     desc: false,
+    logo: false,
+    tags: false,
     vpn: false,
     commonlyUsed: false,
+    recommend: false,
     updated_at: false
   })
+  // 行选择
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   // 保存弹窗
   const saveModalState = useOverlayState();
@@ -62,8 +65,8 @@ const Websites: FC = () => {
   const [editData, setEditData] = useState<App.Website | null>(null);
   // 站点标签
   const [tags, setTags] = useState<string[]>([]);
-  // Logo
-  const [logoFile, setLogoFile] = useState<FileWithPreview['file'] | null>(null);
+  // 批量删除
+  const [batchDeleting, setBatchDeleting] = useState(false);
 
   // 请求分类列表
   const { data: categorysList } = useRequest(async (params) => get<App.Category[]>(await getCategorysList(params), 'data.list', []), {
@@ -80,12 +83,14 @@ const Websites: FC = () => {
   // 发起请求
   const handleSearch = () => {
     run(searchParams)
+    setRowSelection({})
   }
 
   // 重置
   const handleReset = () => {
     setSearchParams(InitialParams)
     run(InitialParams)
+    setRowSelection({})
   }
 
   // 编辑回调
@@ -116,6 +121,16 @@ const Websites: FC = () => {
     delDialogState.open()
   }, [delDialogState])
 
+  // 内联切换 boolean 字段
+  const handleToggle = useCallback((_row: App.Website, key: string, value: boolean) => {
+    (_row as Record<string, unknown>)[key] = value
+    fetch(`/api/websites/${_row.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [key]: value }),
+    }).catch(() => {})
+  }, [])
+
   // 确认删除回调
   const handleDelConfirm = () => {
     if (editData?.id) {
@@ -123,10 +138,41 @@ const Websites: FC = () => {
     }
   }
 
+  // 批量删除
+  const handleBatchDelete = async () => {
+    const ids = Object.keys(rowSelection)
+    if (ids.length === 0) return
+
+    setBatchDeleting(true)
+    try {
+      const res = await fetch('/api/websites/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      const json = await res.json()
+      if (json.code === 200) {
+        toast.success(`成功删除 ${json.data.deleted} 个网站`, {
+          timeout: 2000,
+          indicator: <CircleCheckFill />,
+        });
+        handleSearch();
+      } else {
+        toast.danger(json.msg || '批量删除失败', { timeout: 3000 });
+      }
+    } catch {
+      toast.danger('批量删除失败', { timeout: 3000 });
+    } finally {
+      setBatchDeleting(false)
+    }
+  }
+
+  const selectedCount = Object.keys(rowSelection).length
+
   // 列配置项
   const columns = useMemo(
-    () => getColumns({ handleEdit, handleDel, page: get(data, 'page', 0), pageSize: get(data, 'pageSize', 0) }),
-    [handleEdit, handleDel, data]
+    () => getColumns({ handleEdit, handleDel, onToggle: handleToggle, page: get(data, 'page', 0), pageSize: get(data, 'pageSize', 0) }),
+    [handleEdit, handleDel, handleToggle, data]
   )
 
   // 表格实例
@@ -142,13 +188,13 @@ const Websites: FC = () => {
       },
       sorting,
       columnVisibility,
+      rowSelection,
     },
     onPaginationChange: setSearchParams,
     manualPagination: true,
     onSortingChange: setSorting,
+    onRowSelectionChange: setRowSelection,
     getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
   })
@@ -180,6 +226,10 @@ const Websites: FC = () => {
           handleSearch={handleSearch}
           handleReset={handleReset}
           saveModalState={saveModalState}
+          onImportComplete={handleSearch}
+          selectedCount={selectedCount}
+          onBatchDelete={handleBatchDelete}
+          batchDeleting={batchDeleting}
         />
         <Card.Content>
           <DataTable table={table} loading={loading} />
@@ -196,8 +246,6 @@ const Websites: FC = () => {
         tags={tags}
         setTags={setTags}
         categorysList={categorysList || []}
-        logoFile={logoFile}
-        setLogoFile={setLogoFile}
       />
       {/* 删除弹窗 */}
       <DeleteDialog state={delDialogState} loading={delLoading} handleDelConfirm={handleDelConfirm} />

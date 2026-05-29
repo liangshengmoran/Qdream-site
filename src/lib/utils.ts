@@ -57,4 +57,9 @@ export const pick = <T extends object, TKeys extends keyof T>(
 
 
 // 生成 Logo 链接
-export const generateLogoUrl = (path: string) => `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET}/${path}`
+export const generateLogoUrl = (path: string) => {
+  if (!path) return ''
+  // 外部 URL 直接返回
+  if (path.startsWith('http://') || path.startsWith('https://')) return path
+  return `/uploads/logos/${path}`
+}

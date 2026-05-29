@@ -1,13 +1,13 @@
 /*
  * @Author: 白雾茫茫丶<baiwumm.com>
  * @Date: 2026-01-22 16:24:30
- * @LastEditors: 白雾茫茫丶<baiwumm.com>
+ * @LastEditors: QingYun
  * @LastEditTime: 2026-01-23 14:38:55
  * @Description: 代理层
  */
 import { NextRequest } from 'next/server'
 
-import { updateSession } from "@/lib/supabase/proxy"
+import { updateSession } from "@/lib/auth/middleware"
 
 export default async function proxy(request: NextRequest) {
   return await updateSession(request)

@@ -31,4 +31,5 @@ export const OAUTH_PROVIDERS = Enum({
 export const ADMIN_TABS = Enum({
   CATEGOTYS: { value: 'categorys', label: '网站分类' },
   WEBSITES: { value: 'websites', label: '网站列表' },
+  SETTINGS: { value: 'settings', label: '系统设置' },
 })

@@ -20,15 +20,12 @@ import {
   type UseOverlayStateReturn
 } from "@heroui/react";
 import { useRequest } from "ahooks";
-import { type Dispatch, type FC, type FormEvent, Fragment, type SetStateAction, useEffect, useRef } from 'react';
-
-import LogoUpload from './logo-upload';
+import { type Dispatch, type FC, type FormEvent, type SetStateAction, useEffect, useRef, useState } from 'react';
 
 import TagInputs from "@/components/ui/tag-inputs";
 import { RESPONSE } from '@/enums';
-import { type FileWithPreview } from '@/hooks/use-file-upload';
-import { generateLogoUrl, get } from '@/lib/utils'
-import { addWebsite, updateWebsite, uploadLogo } from '@/services/websites';
+import { get } from '@/lib/utils'
+import { addWebsite, updateWebsite } from '@/services/websites';
 
 const SwitchOptions: { name: string, label: string }[] = [
   { name: 'pinned', label: '置顶' },
@@ -44,8 +41,6 @@ type SaveModalProps = {
   tags: string[];
   setTags: Dispatch<SetStateAction<string[]>>;
   categorysList: App.Category[];
-  logoFile: FileWithPreview['file'] | null;
-  setLogoFile: Dispatch<SetStateAction<FileWithPreview['file'] | null>>;
 }
 
 const SaveModal: FC<SaveModalProps> = ({
@@ -55,46 +50,63 @@ const SaveModal: FC<SaveModalProps> = ({
   tags = [],
   setTags,
   categorysList = [],
-  logoFile,
-  setLogoFile
 }) => {
-  // 表单实例
   const formRef = useRef<HTMLFormElement>(null);
   const actionText = initialValues ? '编辑' : '新增';
-  // Logo 链接
-  const logoUrl = initialValues?.logo ? generateLogoUrl(initialValues.logo) : undefined;
 
-  // 上传成功回调
-  const onSuccess = () => {
-    state.close();
-    toast.success("提交成功", {
-      timeout: 2000,
-      indicator: <CircleCheckFill />,
-    });
-    handleRefresh?.();
+  // 用 React state 管理名称和描述（支持自动填充）
+  const [name, setName] = useState(initialValues?.name ?? '');
+  const [desc, setDesc] = useState(initialValues?.desc ?? '');
+  // 追踪用户是否手动编辑过（编辑过就不再自动覆盖）
+  const nameEditedRef = useRef(!!initialValues?.name);
+  const descEditedRef = useRef(!!initialValues?.desc);
+
+  // 输入网址时防抖自动获取标题和描述
+  const metadataTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const mountedRef = useRef(true);
+  const handleUrlChange = (value: string) => {
+    clearTimeout(metadataTimerRef.current)
+    if (!value || !/^https:\/\//.test(value)) return
+    if (nameEditedRef.current && descEditedRef.current) return
+
+    metadataTimerRef.current = setTimeout(() => {
+      fetch('/api/websites/metadata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: value }),
+      })
+        .then((res) => res.json())
+        .then((json) => {
+          if (!mountedRef.current) return
+          if (json.code === 200 && json.data) {
+            const { title, description } = json.data
+            if (title && !nameEditedRef.current) {
+              setName(title)
+            }
+            if (description && !descEditedRef.current) {
+              setDesc(description)
+            }
+          }
+        })
+        .catch(() => {})
+    }, 600)
   }
-
-  // 上传 Logo
-  const { loading: uploadLoading, run: fetchUploadLogo } = useRequest(uploadLogo, {
-    manual: true,
-    onSuccess: ({ code }) => {
-      if (code === RESPONSE.SUCCESS) {
-        onSuccess();
-      }
-    },
-  });
 
   // 保存表单
   const { loading, run } = useRequest(initialValues?.id ? updateWebsite : addWebsite, {
     manual: true,
     onSuccess: ({ code, data }) => {
       if (code === RESPONSE.SUCCESS) {
-        if (data?.id && logoFile) {
-          const formData = new FormData();
-          formData.append('file', logoFile as File);
-          fetchUploadLogo({ id: data.id, formData })
+        // 新建且没有手动设置 logo，自动获取 favicon
+        if (data?.id && !initialValues) {
+          state.close();
+          toast.success("提交成功", { timeout: 2000, indicator: <CircleCheckFill /> });
+          handleRefresh?.();
+          fetch(`/api/websites/${data.id}/favicon`, { method: 'POST' }).finally(() => handleRefresh?.());
         } else {
-          onSuccess();
+          state.close();
+          toast.success("提交成功", { timeout: 2000, indicator: <CircleCheckFill /> });
+          handleRefresh?.();
         }
       }
     },
@@ -119,12 +131,10 @@ const SaveModal: FC<SaveModalProps> = ({
 
     const hostname = url.hostname;
 
-    // 允许 IP（可选）
     const isIP =
       /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) ||
-      /^\[[0-9a-fA-F:]+\]$/.test(hostname); // IPv6
+      /^\[[0-9a-fA-F:]+\]$/.test(hostname);
 
-    // 至少包含一个点（example.com）
     const hasDot = hostname.includes(".");
 
     if (!hasDot && !isIP) {
@@ -142,18 +152,15 @@ const SaveModal: FC<SaveModalProps> = ({
     const data: App.WebsiteSaveParams = {
       id: initialValues?.id,
 
-      // string
       category_id: formData.get("category_id") as string,
-      name: formData.get("name") as string,
-      desc: (formData.get("desc") as string) ?? "",
+      name,
+      desc: desc || "",
       url: formData.get("url") as string,
       logo: formData.get("logo") as string,
       logoAccent: formData.get("logoAccent") as string,
 
-      // number
       sort: Number(formData.get("sort")),
 
-      // boolean（checkbox 选中才会存在）
       pinned: formData.has("pinned"),
       vpn: formData.has("vpn"),
       recommend: formData.has("recommend"),
@@ -161,24 +168,32 @@ const SaveModal: FC<SaveModalProps> = ({
 
       tags
     };
-    // 新增必须上传 Logo
-    if (!initialValues && !logoFile) {
-      toast.danger("请上传网站logo", {
-        timeout: 2000,
-        indicator: <Xmark />,
-      });
-      return
-    }
     run({ ...data, id: initialValues?.id, tags });
   };
 
   useEffect(() => {
     if (!state.isOpen && formRef.current) {
       formRef.current.reset();
+      setName('');
+      setDesc('');
+      nameEditedRef.current = false;
+      descEditedRef.current = false;
+      clearTimeout(metadataTimerRef.current);
+      mountedRef.current = false;
       setTags([]);
-      setLogoFile(null);
     }
-  }, [state.isOpen, setTags, setLogoFile]);
+  }, [state.isOpen, setTags]);
+
+  // 打开弹窗时同步初始值（编辑模式）
+  useEffect(() => {
+    if (state.isOpen) {
+      mountedRef.current = true;
+      setName(initialValues?.name ?? '');
+      setDesc(initialValues?.desc ?? '');
+      nameEditedRef.current = !!initialValues?.name;
+      descEditedRef.current = !!initialValues?.desc;
+    }
+  }, [state.isOpen, initialValues]);
   return (
     <Modal.Backdrop isOpen={state.isOpen} onOpenChange={state.setOpen} isDismissable={false} isKeyboardDismissDisabled>
       <Modal.Container placement="auto">
@@ -219,10 +234,26 @@ const SaveModal: FC<SaveModalProps> = ({
                 </Select>
                 <TextField
                   isRequired
+                  name="url"
+                  minLength={1}
+                  defaultValue={initialValues?.url ?? ""}
+                  validate={validateUrl}
+                >
+                  <Label>网站链接</Label>
+                  <Input aria-label="网站链接" fullWidth variant="secondary" placeholder="请输入网站链接" onChange={(e) => handleUrlChange(e.target.value)} />
+                  <FieldError />
+                </TextField>
+                <TextField
+                  isRequired
                   name="name"
                   minLength={1}
                   maxLength={100}
-                  defaultValue={initialValues?.name ?? ""}
+                  value={name}
+                  onChange={(e) => {
+                    if (!e?.target) return
+                    setName(e.target.value)
+                    nameEditedRef.current = true
+                  }}
                   validate={(value) => {
                     if (!value) {
                       return "请输入网站名称";
@@ -234,28 +265,23 @@ const SaveModal: FC<SaveModalProps> = ({
                   <Input aria-label="网站名称" fullWidth variant="secondary" placeholder="请输入网站名称" />
                   <FieldError />
                 </TextField>
-                <TextField
-                  isRequired
-                  name="url"
-                  minLength={1}
-                  defaultValue={initialValues?.url ?? ""}
-                  validate={validateUrl}
-                >
-                  <Label>网站链接</Label>
-                  <Input aria-label="网站链接" fullWidth variant="secondary" placeholder="请输入网站链接" />
-                  <FieldError />
+                <TextField name="logo" defaultValue={initialValues?.logo ?? ''}>
+                  <Label>Logo</Label>
+                  <Input aria-label="Logo URL" fullWidth variant="secondary" placeholder="https://... 或留空自动获取" />
+                  <Description>填入图标 URL，留空则在添加时自动获取网站 favicon。</Description>
                 </TextField>
-                <div className="flex flex-col gap-1">
-                  <Label isRequired htmlFor="logo">Logo</Label>
-                  <LogoUpload defaultAvatar={logoUrl} onFileChange={(value) => setLogoFile(value?.file || null)} />
-                </div>
                 <TextField name="logoAccent" defaultValue={initialValues?.logoAccent ?? ""}>
                   <Label>Logo 主色</Label>
                   <Input aria-label="Logo 主色" fullWidth variant="secondary" placeholder="请输入 Logo 主色" />
                   <Description>用于显示边框动画，不设置默认主题色。</Description>
                 </TextField>
                 <TagInputs value={tags} onChange={setTags} />
-                <TextField name="desc" maxLength={500} defaultValue={initialValues?.desc ?? ""}>
+                <TextField name="desc" maxLength={500} value={desc}
+                  onChange={(e) => {
+                    if (!e?.target) return
+                    setDesc(e.target.value)
+                    descEditedRef.current = true
+                  }}>
                   <Label>网站描述</Label>
                   <TextArea aria-label="网站描述" fullWidth variant="secondary" rows={3} placeholder="请输入网站描述" />
                 </TextField>
@@ -284,39 +310,31 @@ const SaveModal: FC<SaveModalProps> = ({
                     ))}
                   </div>
                 </div>
-                <NumberField
+                <TextField
                   isRequired
                   validate={(value) => {
-                    if (!value) {
-                      return "请输入排序";
-                    }
+                    if (!value) return "请输入排序";
                     return null;
                   }}
-                  maxValue={99}
-                  minValue={1}
                   name="sort"
-                  defaultValue={initialValues?.sort ?? 1}
+                  defaultValue={String(initialValues?.sort ?? 1)}
                   variant="secondary"
                 >
                   <Label>排序</Label>
-                  <NumberField.Group>
-                    <NumberField.DecrementButton />
-                    <NumberField.Input />
-                    <NumberField.IncrementButton />
-                  </NumberField.Group>
-                </NumberField>
+                  <Input type="number" aria-label="排序" fullWidth variant="secondary" />
+                </TextField>
               </Form>
             </Surface>
           </Modal.Body>
           <Modal.Footer>
-            <Button slot="close" variant="outline" isDisabled={loading || uploadLoading}>
+            <Button slot="close" variant="outline" isDisabled={loading}>
               取消
             </Button>
-            <Button type="submit" form="category-form" isPending={loading || uploadLoading}>
+            <Button type="submit" form="category-form" isPending={loading}>
               {({ isPending }) => (
                 <>
                   {isPending ? <Spinner color="current" size="sm" /> : null}
-                  {loading ? "正在提交..." : uploadLoading ? '正在上传 Logo...' : "确定"}
+                  {isPending ? "正在提交..." : "确定"}
                 </>
               )}
             </Button>

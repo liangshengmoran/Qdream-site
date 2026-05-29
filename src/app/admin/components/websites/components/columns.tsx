@@ -13,6 +13,7 @@ const columnHelper = createColumnHelper<App.Website>()
 type ColumnsProps = {
   handleEdit: (row: App.Website) => void
   handleDel: (row: App.Website) => void
+  onToggle: (row: App.Website, key: string, value: boolean) => void
   page: number
   pageSize: number
 }
@@ -20,6 +21,7 @@ type ColumnsProps = {
 export const getColumns = ({
   handleEdit,
   handleDel,
+  onToggle,
   page = 1,
   pageSize = 10
 }: ColumnsProps) => {
@@ -32,14 +34,19 @@ export const getColumns = ({
   ] as const
 
   return [
+    columnHelper.display({
+      id: "select",
+      header: "",
+      cell: () => null,
+      size: 40,
+      enableSorting: false,
+    }),
 
     columnHelper.display({
       id: "index",
       header: "序号",
       cell: ({ row }) => (
-        <Chip className="rounded-full">
-          {(page - 1) * pageSize + row.index + 1}
-        </Chip>
+        <Chip className="rounded-full">{(page - 1) * pageSize + row.index + 1}</Chip>
       )
     }),
 
@@ -48,10 +55,7 @@ export const getColumns = ({
       cell: (info) => {
         const row = info.row.original
         return (
-          <Link href={row.url} target="_blank">
-            {info.getValue()}
-            <Link.Icon />
-          </Link>
+          <Link href={row.url} target="_blank">{info.getValue()}<Link.Icon /></Link>
         )
       }
     }),
@@ -60,20 +64,11 @@ export const getColumns = ({
       header: "网站描述",
       cell: (info) => {
         const val = info.getValue()
-
         if (!val) return "--"
-
         return (
           <Tooltip delay={0}>
-            <Tooltip.Trigger aria-label="Description">
-              <span className="truncate">
-                {val.length > 15 ? `${val.slice(0, 15)}...` : val}
-              </span>
-            </Tooltip.Trigger>
-            <Tooltip.Content showArrow>
-              <Tooltip.Arrow />
-              <p>{val}</p>
-            </Tooltip.Content>
+            <Tooltip.Trigger><span className="truncate">{val.length > 15 ? `${val.slice(0, 15)}...` : val}</span></Tooltip.Trigger>
+            <Tooltip.Content showArrow><Tooltip.Arrow /><p>{val}</p></Tooltip.Content>
           </Tooltip>
         )
       }
@@ -83,20 +78,8 @@ export const getColumns = ({
       header: "Logo",
       cell: (info) => {
         const url = info.getValue()
-        const row = info.row.original
-
         if (!url) return "--"
-
-        return (
-          <div className="flex justify-center">
-            <Image
-              src={generateLogoUrl(url)}
-              width={32}
-              height={32}
-              alt={row.name}
-            />
-          </div>
-        )
+        return <div className="flex justify-center"><Image src={generateLogoUrl(url)} width={32} height={32} alt={info.row.original.name} /></div>
       }
     }),
 
@@ -104,68 +87,42 @@ export const getColumns = ({
       header: "标签",
       cell: (info) => {
         const tags = info.getValue()
-
         if (!tags?.length) return "--"
-
-        return (
-          <div className="flex justify-center items-center gap-1">
-            {tags.map(tag => (
-              <Chip
-                key={tag}
-                color="accent"
-                variant="soft"
-                className="rounded-full"
-              >
-                {tag}
-              </Chip>
-            ))}
-          </div>
-        )
+        return <div className="flex justify-center items-center gap-1">{tags.map(tag => <Chip key={tag} color="accent" variant="soft" className="rounded-full">{tag}</Chip>)}</div>
       }
     }),
 
     columnHelper.display({
       id: "category",
       header: "所属分类",
-      cell: ({ row }) => (
-        <Chip color="success" variant="soft" className="rounded-full">
-          {row.original.category.name}
-        </Chip>
-      )
+      cell: ({ row }) => <Chip color="accent" variant="primary" className="rounded-full">{row.original.category.name}</Chip>
     }),
 
     columnHelper.accessor("visitCount", {
       header: "访问次数",
-      cell: (info) => (
-        <Chip color="accent" variant="secondary" className="rounded-full">
-          {info.getValue()}
-        </Chip>
-      )
+      cell: (info) => <Chip color="accent" variant="secondary" className="rounded-full">{info.getValue()}</Chip>
     }),
 
     columnHelper.accessor("sort", {
       header: "排序",
-      cell: (info) => (
-        <Chip color="warning" variant="soft" className="rounded-full">
-          {info.getValue()}
-        </Chip>
-      )
+      cell: (info) => <Chip color="warning" variant="soft" className="rounded-full">{info.getValue()}</Chip>
     }),
 
     ...booleanColumns.map(({ key, header }) =>
       columnHelper.accessor(key, {
         header,
         cell: (info) => (
-          <Switch isSelected={info.getValue()} isReadOnly>
+          <Switch
+            key={`toggle-${info.row.original.id}-${key}`}
+            defaultSelected={info.getValue() as boolean}
+            value="on"
+            onChange={(v) => onToggle(info.row.original, key, v)}
+          >
             {({ isSelected }) => (
               <Switch.Control>
                 <Switch.Thumb>
                   <Switch.Icon>
-                    {isSelected ? (
-                      <Check className="size-3 text-inherit opacity-100" />
-                    ) : (
-                      <Xmark className="size-3 text-inherit opacity-70" />
-                    )}
+                    {isSelected ? <Check className="size-3 text-inherit opacity-100" /> : <Xmark className="size-3 text-inherit opacity-70" />}
                   </Switch.Icon>
                 </Switch.Thumb>
               </Switch.Control>
@@ -177,20 +134,12 @@ export const getColumns = ({
 
     columnHelper.accessor("created_at", {
       header: "创建时间",
-      cell: (info) => (
-        <span className="text-muted text-xs">
-          {dayjs(info.getValue()).format("YYYY-MM-DD HH:mm")}
-        </span>
-      )
+      cell: (info) => <span className="text-muted text-xs">{dayjs(info.getValue()).format("YYYY-MM-DD HH:mm")}</span>
     }),
 
     columnHelper.accessor("updated_at", {
       header: "更新时间",
-      cell: (info) => (
-        <span className="text-muted text-xs">
-          {dayjs(info.getValue()).format("YYYY-MM-DD HH:mm")}
-        </span>
-      )
+      cell: (info) => <span className="text-muted text-xs">{dayjs(info.getValue()).format("YYYY-MM-DD HH:mm")}</span>
     }),
 
     columnHelper.display({
@@ -198,28 +147,10 @@ export const getColumns = ({
       header: "操作",
       cell: ({ row }) => (
         <div className="flex items-center justify-center min-w-25">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-xs"
-            onPress={() => handleEdit(row.original)}
-          >
-            <PencilToSquare />
-            修改
-          </Button>
-
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-xs text-danger hover:bg-danger-soft"
-            onPress={() => handleDel(row.original)}
-          >
-            <TrashBin />
-            删除
-          </Button>
+          <Button size="sm" variant="ghost" className="text-xs" onPress={() => handleEdit(row.original)}><PencilToSquare />修改</Button>
+          <Button size="sm" variant="ghost" className="text-xs text-danger hover:bg-danger-soft" onPress={() => handleDel(row.original)}><TrashBin />删除</Button>
         </div>
       )
     })
-
   ]
 }

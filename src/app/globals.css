@@ -94,6 +94,17 @@
   .toast__content {
     @apply gap-2;
   }
+
+  /* Toast 宽度自适应 */
+  .toast {
+    left: auto !important;
+    right: auto !important;
+    position: relative !important;
+    width: auto !important;
+  }
+  .toast-region {
+    min-width: auto !important;
+  }
 }
 
 @layer base {

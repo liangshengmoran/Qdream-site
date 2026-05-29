@@ -1,129 +1,78 @@
 import { NextRequest, NextResponse } from 'next/server'
+import fs from 'fs'
+import path from 'path'
 
 import { RESPONSE } from '@/enums'
-import { getSupabaseServerClient } from '@/lib/supabase/server'
+import { initDb, updateWebsite, deleteWebsite, getWebsiteById } from '@/lib/db'
+import { getCurrentUser } from '@/lib/auth/server'
 import { responseMessage } from '@/lib/utils'
 
-/**
- * @description: 修改网站
- * @param {Request} request
- */
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const supabase = await getSupabaseServerClient();
-    // 获取动态参数
-    const { id } = await params;
-    // 解析请求体
-    const body = await request.json(); // 如果是 JSON 数据
+    initDb()
+    const user = await getCurrentUser(request)
+    if (!user) return NextResponse.json(responseMessage(null, '未登录', -1))
+    const { id } = await params
+    const body = await request.json()
 
-    // 更新分类
-    const { data, error } = await supabase
-      .from('ds_websites')
-      .update(body)
-      .eq('id', id)
-      .select()
-      .single();
-
-    // 如果插入失败
-    if (error) {
-      // 判断是否违反唯一性约束（PostgreSQL 错误代码 23505）
-      if (error.code === '23505') {
-        return NextResponse.json(responseMessage(null, '网站名称已存在！', -1));
+    try {
+      const data = updateWebsite(id, body)
+      if (!data) {
+        return NextResponse.json(responseMessage(null, '网站不存在', RESPONSE.ERROR))
       }
-
-      // 其他错误
-      return NextResponse.json(responseMessage(null, error.message, RESPONSE.ERROR));
+      return NextResponse.json(responseMessage(data))
+    } catch (err: unknown) {
+      const msg = (err as Error).message || ''
+      if (msg.includes('UNIQUE constraint') || msg.includes('SQLITE_CONSTRAINT')) {
+        return NextResponse.json(responseMessage(null, '网站名称已存在！', -1))
+      }
+      throw err
     }
-
-    // 返回更新后的菜单数据
-    return NextResponse.json(responseMessage(data));
   } catch (err) {
-    return NextResponse.json(responseMessage(null, (err as Error).message, -1));
+    return NextResponse.json(responseMessage(null, (err as Error).message, -1))
   }
 }
 
-/**
- * @description: 删除网站
- * @param {Request} request
- */
-export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const supabase = await getSupabaseServerClient();
-    const { id: siteId } = await params;
-
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      return NextResponse.json(
-        responseMessage(null, '未登录', -1)
-      );
+    initDb()
+    const user = await getCurrentUser(request)
+    if (!user) {
+      return NextResponse.json(responseMessage(null, '未登录', -1))
     }
 
-    const uid = user.id;
-    const bucket = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET!;
-    const folderPath = `${uid}/${siteId}`;
+    const { id: siteId } = await params
 
-    /* --------------------------------------------------
-     * 1. 列出该站点下所有 logo 文件
-     * -------------------------------------------------- */
-    const { data: files, error: listError } = await supabase.storage
-      .from(bucket)
-      .list(folderPath, {
-        limit: 100,
-      });
-
-    if (listError) {
-      return NextResponse.json(
-        responseMessage(null, listError.message, RESPONSE.ERROR)
-      );
-    }
-
-    /* --------------------------------------------------
-     * 2. 删除所有文件（如果存在）
-     * -------------------------------------------------- */
-    if (files && files.length > 0) {
-      const paths = files.map(
-        (file) => `${folderPath}/${file.name}`
-      );
-
-      const { error: removeError } = await supabase.storage
-        .from(bucket)
-        .remove(paths);
-
-      if (removeError) {
-        return NextResponse.json(
-          responseMessage(
-            null,
-            `删除 Logo 失败：${removeError.message}`,
-            RESPONSE.ERROR
-          )
-        );
+    const website = getWebsiteById(siteId)
+    // 只删除本地 logo 文件（跳过外部 URL）
+    if (website?.logo && !website.logo.startsWith('http')) {
+      const logoPath = path.join(process.cwd(), 'public', 'uploads', 'logos', website.logo)
+      if (fs.existsSync(logoPath)) {
+        fs.unlinkSync(logoPath)
       }
+      // Clean up empty parent directories
+      const siteDir = path.dirname(logoPath)
+      try {
+        fs.rmdirSync(siteDir)
+      } catch { /* directory not empty, ignore */ }
+      try {
+        const userDir = path.dirname(siteDir)
+        fs.rmdirSync(userDir)
+      } catch { /* directory not empty, ignore */ }
     }
 
-    /* --------------------------------------------------
-     * 3. 删除数据库中的网站记录
-     * -------------------------------------------------- */
-    const { data, error } = await supabase
-      .from('ds_websites')
-      .delete()
-      .eq('id', siteId)
-      .select()
-      .single();
-
-    if (error) {
-      return NextResponse.json(
-        responseMessage(null, error.message, RESPONSE.ERROR)
-      );
+    const data = deleteWebsite(siteId)
+    if (!data) {
+      return NextResponse.json(responseMessage(null, '网站不存在', RESPONSE.ERROR))
     }
-
-    return NextResponse.json(responseMessage(data));
+    return NextResponse.json(responseMessage(data))
   } catch (err) {
-    return NextResponse.json(
-      responseMessage(null, (err as Error).message, RESPONSE.ERROR)
-    );
+    return NextResponse.json(responseMessage(null, (err as Error).message, -1))
   }
 }

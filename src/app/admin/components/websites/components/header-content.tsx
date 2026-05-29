@@ -1,18 +1,19 @@
 /*
- * @Author: 白雾茫茫丶<baiwumm.com>
+ * @Author: QingYun
  * @Date: 2026-02-02 10:19:47
- * @LastEditors: 白雾茫茫丶<baiwumm.com>
+ * @LastEditors: QingYun
  * @LastEditTime: 2026-02-02 11:28:00
  * @Description: 顶部区域
  */
 "use client"
-import { ArrowRotateLeft, Magnifier, Plus } from '@gravity-ui/icons';
-import { Button, Card, ListBox, SearchField, Select, Spinner, useOverlayState } from "@heroui/react";
+import { ArrowDownToLine, ArrowRotateLeft, ArrowUpRightFromSquare, Magnifier, Plus, TrashBin } from '@gravity-ui/icons';
+import { Button, Card, ListBox, SearchField, Select, Spinner, toast, useOverlayState } from "@heroui/react";
 import { type Table } from '@tanstack/react-table';
 import type { SetState } from 'ahooks/es/useSetState';
-import { type FC, type KeyboardEvent } from 'react';
+import { type ChangeEvent, type FC, type KeyboardEvent, useRef, useState } from 'react';
 
 import ColumnsVisibility from '@/components/ColumnsVisibility';
+import { CircleCheckFill } from '@gravity-ui/icons';
 
 type HeaderContentProps = {
   table: Table<App.Website>;
@@ -23,6 +24,10 @@ type HeaderContentProps = {
   handleSearch: VoidFunction;
   handleReset: VoidFunction;
   saveModalState: ReturnType<typeof useOverlayState>;
+  onImportComplete: VoidFunction;
+  selectedCount: number;
+  onBatchDelete: VoidFunction;
+  batchDeleting: boolean;
 }
 
 const HeaderContent: FC<HeaderContentProps> = ({
@@ -33,9 +38,50 @@ const HeaderContent: FC<HeaderContentProps> = ({
   loading = false,
   handleSearch,
   handleReset,
-  saveModalState
+  saveModalState,
+  onImportComplete,
+  selectedCount,
+  onBatchDelete,
+  batchDeleting,
 }) => {
-  // 回车事件
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/import/bookmarks', {
+        method: 'POST',
+        body: formData,
+      });
+      const json = await res.json();
+      if (json.code === 200) {
+        const { createdCategories, createdWebsites, skippedWebsites } = json.data;
+        toast.success(`导入完成：${createdCategories} 个分类、${createdWebsites} 个网站${skippedWebsites > 0 ? `，跳过 ${skippedWebsites} 个重复` : ''}`, {
+          timeout: 3000,
+          indicator: <CircleCheckFill />,
+        });
+        onImportComplete();
+      } else {
+        toast.danger(json.msg || '导入失败', { timeout: 3000 });
+      }
+    } catch {
+      toast.danger('导入失败', { timeout: 3000 });
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -97,6 +143,34 @@ const HeaderContent: FC<HeaderContentProps> = ({
           <Plus />
           新增
         </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".html,.htm"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+        <Button variant="outline" size='sm' isPending={importing} onPress={handleImportClick}>
+          {({ isPending }) => (
+            <>
+              {isPending ? <Spinner color="current" size='sm' /> : <ArrowDownToLine />}
+              {isPending ? '导入中...' : '导入书签'}
+            </>
+          )}
+        </Button>
+        <Button variant="outline" size='sm' onPress={() => window.open('/api/export/bookmarks', '_blank')}>
+          <ArrowUpRightFromSquare />导出书签
+        </Button>
+        {selectedCount > 0 && (
+          <Button variant="outline" size='sm' className="text-danger" isPending={batchDeleting} onPress={onBatchDelete}>
+            {({ isPending }) => (
+              <>
+                {isPending ? <Spinner color="current" size='sm' /> : <TrashBin />}
+                {isPending ? '删除中...' : `删除选中(${selectedCount})`}
+              </>
+            )}
+          </Button>
+        )}
       </Card.Title>
       <ColumnsVisibility table={table} />
     </Card.Header>

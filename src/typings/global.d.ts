@@ -58,6 +58,9 @@ declare namespace App {
   type Category = Columns & {
     name: string; // 分类名称
     websites: Website[]; // 网站列表
+    private: boolean; // 隐私模式
+    parent_id: string | null; // 父级分类
+    children?: Category[]; // 子分类（树形结构）
   }
 
   /** @description: 网站分类查询参数 */
@@ -66,5 +69,7 @@ declare namespace App {
   /** @description: 网站分类表单 */
   type CategorySaveParams = Pick<Category, 'name' | 'sort'> & {
     id?: string;
+    parent_id?: string | null;
+    private?: boolean;
   };
 }

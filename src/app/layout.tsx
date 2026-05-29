@@ -54,7 +54,7 @@ export default function RootLayout({
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <meta name="version" content={pkg.version} />
-        <link rel="stylesheet" href="https://cdn.baiwumm.com/fonts/MapleMono-CN-Regular/result.css" />
+        <link rel="stylesheet" href="/fonts/MapleMono-CN-Regular/result.css" />
         {/* Umami 统计 */}
         <UmamiAnalytics />
         {/* Google 统计 */}
