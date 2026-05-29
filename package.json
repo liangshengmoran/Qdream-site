@@ -13,9 +13,9 @@
     "issues": "https://github.com/baiwumm/dream-site/issues"
   },
   "scripts": {
-    "dev": "next dev -p 5173",
+    "dev": "next dev -p ${PORT:-5173}",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p ${PORT:-5173}",
     "lint": "eslint",
     "release": "release-it"
   },
