@@ -44,8 +44,8 @@ yarn-error.log*
 # user uploads
 /public/uploads/
 
-# downloaded fonts (re-download on npm install)
-/public/fonts/
+# downloaded fonts (tracked in git for deployment)
+# /public/fonts/
 
 # IDE
 .vscode/
