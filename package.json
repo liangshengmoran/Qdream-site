@@ -27,7 +27,6 @@
     "@heroui/styles": "3.0.3",
     "@next/third-parties": "^16.1.6",
     "@tanstack/react-table": "^8.21.3",
-    "@vercel/analytics": "^1.6.1",
     "ahooks": "^3.9.6",
     "axios": "^1.13.2",
     "bcryptjs": "^2.4.3",
