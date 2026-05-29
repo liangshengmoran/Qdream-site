@@ -15,7 +15,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "tsx server.ts",
     "lint": "eslint",
     "release": "release-it"
   },
