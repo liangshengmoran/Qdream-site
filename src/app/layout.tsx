@@ -1,4 +1,3 @@
-import { Analytics } from '@vercel/analytics/next';
 import type { Metadata } from "next";
 import { ThemeProvider } from 'next-themes';
 
@@ -62,8 +61,6 @@ export default function RootLayout({
         {/* 微软统计 */}
         <MicrosoftClarity />
         {/* Vercel 分析 */}
-        {/* Vercel 分析（仅 Vercel 环境加载） */}
-        {process.env.VERCEL && <Analytics />}
       </head>
       <body>
         <ThemeProvider attribute="class" enableSystem={false}>
