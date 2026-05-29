@@ -8,6 +8,8 @@ import { signJwt } from '@/lib/auth/jwt'
 import { getCookieOptions } from '@/lib/auth/server'
 import { responseMessage } from '@/lib/utils'
 
+const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads', 'avatars')
+
 export async function POST(request: NextRequest) {
   try {
     initDb()
@@ -18,13 +20,17 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File
     if (!file) return NextResponse.json(responseMessage(null, '缺少文件', -1))
 
-    const ext = file.name.split('.').pop()
-    const filename = `avatar.${ext}`
-    const dir = path.join(process.cwd(), 'public', 'uploads', 'avatars', user.sub)
-    fs.mkdirSync(dir, { recursive: true })
-    fs.writeFileSync(path.join(dir, filename), Buffer.from(await file.arrayBuffer()))
+    // Ensure upload directory exists
+    const userDir = path.join(UPLOAD_DIR, user.sub)
+    if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true })
 
-    const avatarUrl = `/uploads/avatars/${user.sub}/${filename}?t=${Date.now()}`
+    const ext = file.name.split('.').pop() || 'png'
+    const filename = `avatar.${ext}`
+    const filePath = path.join(userDir, filename)
+    fs.writeFileSync(filePath, Buffer.from(await file.arrayBuffer()))
+    console.log('[avatar] saved to:', filePath, 'exists:', fs.existsSync(filePath))
+
+    const avatarUrl = `/api/avatar/${user.sub}?t=${Date.now()}`
     const db = getDb()
     db.prepare('UPDATE users SET avatar_url = ?, updated_at = ? WHERE id = ?').run(avatarUrl, new Date().toISOString(), user.sub)
 
