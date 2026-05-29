@@ -186,7 +186,3 @@ docker run -d -p 5173:5173 -v /opt/dream-site/data:/data dream-site
 
 ## 📜 许可证
 本项目采用 [MIT](LICENSE) 许可证。
-
-## ⭐ Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=baiwumm/dream-site&type=Date)](https://star-history.com/#baiwumm/dream-site&Date)
