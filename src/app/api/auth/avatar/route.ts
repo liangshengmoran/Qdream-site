@@ -24,11 +24,14 @@ export async function POST(request: NextRequest) {
     const userDir = path.join(UPLOAD_DIR, user.sub)
     if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true })
 
+    // 删除旧头像文件
+    const oldFiles = fs.readdirSync(userDir).filter(f => f.startsWith('avatar.'))
+    for (const f of oldFiles) fs.unlinkSync(path.join(userDir, f))
+
     const ext = file.name.split('.').pop() || 'png'
     const filename = `avatar.${ext}`
     const filePath = path.join(userDir, filename)
     fs.writeFileSync(filePath, Buffer.from(await file.arrayBuffer()))
-    console.log('[avatar] saved to:', filePath, 'exists:', fs.existsSync(filePath))
 
     const avatarUrl = `/api/avatar/${user.sub}?t=${Date.now()}`
     const db = getDb()
